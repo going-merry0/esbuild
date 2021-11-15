@@ -2,6 +2,9 @@ package js_parser
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -4785,4 +4788,45 @@ func TestASCIIOnly(t *testing.T) {
 	expectPrintedASCII(t, "export var 𐀀", "export var \\u{10000};\n")
 	expectPrintedTargetASCII(t, 5, "export var π", "export var \\u03C0;\n")
 	expectParseErrorTargetASCII(t, 5, "export var 𐀀", es5)
+}
+
+func compile(t *testing.B, code string, opts *config.Options) {
+	log := logger.NewDeferLog(logger.DeferLogNoVerboseOrDebug)
+	_, ok := Parse(log, test.SourceForTest(code), OptionsFromConfig(opts))
+	if !ok {
+		t.Fatal("should pass")
+	}
+}
+
+func BenchmarkParsing(t *testing.B) {
+	libs := []struct {
+		name string
+		code string
+	}{
+		{"angular.js", ""},
+		{"backbone.js", ""},
+		{"ember.js", ""},
+		{"jquery.js", ""},
+		{"react-dom.js", ""},
+		{"react.js", ""},
+	}
+
+	_, fileName, _, _ := runtime.Caller(0)
+	for _, lib := range libs {
+		b, err := ioutil.ReadFile(path.Join(path.Dir(fileName), "assets", lib.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lib.code = string(b)
+	}
+
+	opts := &config.Options{}
+	opts.OmitRuntimeForTests = true
+	for _, lib := range libs {
+		t.Run(lib.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				compile(t, lib.code, opts)
+			}
+		})
+	}
 }
